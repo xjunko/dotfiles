@@ -2,7 +2,9 @@
 super simple config i had for my setup, made for myself only.
 
 # preview
-[TBA]
+![image](https://github.com/xjunko/dotfiles/assets/44401509/bb968c04-1e04-4eef-ad4b-cfedc11b3f4c)
+![image](https://github.com/xjunko/dotfiles/assets/44401509/90b90e7c-e546-4f4d-a118-7806a1e8d88f)
+
 
 # requirements
 * arch linux
@@ -14,7 +16,6 @@ super simple config i had for my setup, made for myself only.
 for the dotfiles, you can use chezmoi's `install.sh`.
 
 ## firefox
-firefox stuff
 * enable `toolkit.legacyUserProfileCustomizations.stylesheets` in `about:config`
 * open your profile in `about:profiles`
-* copy assets/chrome folder into that profile
+* copy `assets/firefox/chrome` folder into that profile
