@@ -1,0 +1,35 @@
+# essentials
+polybar-git
+picom
+bspwm
+chezmoi
+dunst
+rofi
+sxhkd
+dmenu
+dex
+feh
+flameshot
+
+# core-ish programs
+thunar
+thunar-volman
+thunar-archive-plugin
+hunar-media-tags-plugin
+lxappearance
+
+# programs
+firefox
+easyeffects
+discord-ptb
+spotify
+
+# dev
+zsh
+gdb
+glfw
+clang
+visual-studio-code-bin
+
+# games
+prismlauncher-qt5-bin
