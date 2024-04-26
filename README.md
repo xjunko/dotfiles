@@ -3,6 +3,7 @@ super simple config i had for my setup, made for myself only.
 
 # preview
 ![image](https://github.com/xjunko/dotfiles/assets/44401509/bb968c04-1e04-4eef-ad4b-cfedc11b3f4c)
+
 ![image](https://github.com/xjunko/dotfiles/assets/44401509/90b90e7c-e546-4f4d-a118-7806a1e8d88f)
 
 
