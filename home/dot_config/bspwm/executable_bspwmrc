@@ -3,7 +3,12 @@
 ## bspwm rules
 pgrep -x sxhkd > /dev/null || sxhkd &
 
+# Laptop
 bspc monitor -d I II III IV V
+
+# Home 
+# bspc monitor HDMI-0 -d I II III IV V
+# bspc monitor DP-0 -d V VI VII
 
 bspc config border_width         2
 bspc config window_gap          12
@@ -13,6 +18,11 @@ bspc config borderless_monocle      true
 bspc config gapless_monocle         true
 bspc config focus_follows_pointer   true
 bspc config pointer_motion_interval 16
+
+bspc rule -a firefox desktop='^2'
+bspc rule -a mplayer2 state=floating
+bspc rule -a Yad state=floating
+bspc rule -a Screenkey manage=off
 
 xsetroot -cursor_name left_ptr &
 
