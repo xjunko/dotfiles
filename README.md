@@ -13,8 +13,7 @@ super simple config i had for my setup, made for myself only.
 # requirements
 * arch linux
 * knowledge in linux is optional but it helps
-* whatever in the packages.txt file
-
+  
 # install
 ## dots [chezmoi]
 for the dotfiles, you can use chezmoi's `install.sh`.
