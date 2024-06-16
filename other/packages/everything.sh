@@ -4,7 +4,7 @@
 # pape: https://hatsune-miku.has.rocks/pape.jpg
 
 # Install config
-# bash ../../install.sh
+bash ../../install.sh
 
 # Run the usual two scripts.
 bash ./package-remove-eos.sh
