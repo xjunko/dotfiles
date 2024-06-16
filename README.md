@@ -19,7 +19,11 @@ super simple config i had for my setup, made for myself only.
 ## dots [chezmoi]
 for the dotfiles, you can use chezmoi's `install.sh`.
 
+## packages
+first, `cd` to `other/packages`. <br>
+if coming from endeaveros run `eos-bloat.sh` and then run `install_sync_packages.sh`.
+
 ## firefox
 * enable `toolkit.legacyUserProfileCustomizations.stylesheets` in `about:config`
 * open your profile in `about:profiles`
-* copy `assets/firefox/chrome` folder into that profile
+* copy `other/firefox/chrome` folder into that profile
