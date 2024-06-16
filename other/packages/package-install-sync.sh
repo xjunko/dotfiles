@@ -11,13 +11,19 @@ echo "Installing file explorer packages"
 yay -S thunar thunar-volman thunar-archive-plugin ffmpeg-audio-thumbnailer --needed
 
 echo "Installing user packages"
-yay -S firefox vesktop-bin spotify-launcher --needed
+yay -S firefox vesktop-bin spotify-launcher osc-url --needed
 
 echo "Installing maintenance packages"
 yay -S gparted btop htop --needed
 
 echo "Installing deveploment packages"
 yay -S zsh gdb glfw clang visual-studio-code-bin --needed
+
+echo "Install android debugging packages"
+yay -S android-tools android-udev --needed
+
+echo "Installing JAVA JDKs"
+yay -S jdk-openjdk jdk17-openjdk jdk11-openjdk jdk8-openjdk --needed
 
 echo "Installing game packages"
 yay -S prismlauncher-qt5-bin steam --needed
