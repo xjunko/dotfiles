@@ -1,0 +1,14 @@
+
+[cursor]
+style = "Block"
+unfocused_hollow = true
+
+[font]
+size = 10.0
+
+[window]
+opacity = 1
+blur = false
+
+[general]
+live_config_reload = true
