@@ -23,6 +23,10 @@ first, `cd` to `other/packages`. <br>
 if coming from endeaveros run `eos-bloat.sh` and then run `install_sync_packages.sh`.
 
 ## firefox
-* enable `toolkit.legacyUserProfileCustomizations.stylesheets` in `about:config`
+### about:config
+* `toolkit.legacyUserProfileCustomizations.stylesheets` = true
+* `sidebar.revamp` = true
+* `sidebar.verticalTabs` = true
+### applying
 * open your profile in `about:profiles`
-* copy `other/firefox/chrome` folder into that profile
+* copy the contents of `other/firefox/chrome` into your profile.
