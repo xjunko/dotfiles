@@ -1,9 +1,32 @@
-@import "config.css";
-@import "variables.css";
-@import "icons/icons.css";
-@import "urlbar/urlbar.css";
-@import "navbar/navbar.css";
-@import "popup/popup.css";
-@import "interface/interface.css";
-@import "userChrome-tabline.css";
-@import "content/inner-rounded.css";
+@import "./tweaks/expand-vertical-tabs-on-hover/index.css";
+
+#titlebar { display: none; }
+.urlbar-input-box { text-align: center; }
+#nav-bar { margin: 3px; }
+#urlbar:not([focused]) #urlbar-background { opacity: 0 !important; }
+
+* {
+    font-family: "monospace";
+}
+
+.browserContainer browser {
+    border-radius: 5px !important;
+    /* margin: 0vh 1vh 2vh 0vh; */
+}
+
+#navigator-toolbox {
+    max-height: 2vh;
+    
+    & * {
+        opacity: 0;
+    }
+}
+
+#navigator-toolbox:hover {
+    max-height: 100vh;
+    height: auto;
+    
+    & * {
+        opacity: 1;
+    }
+}
