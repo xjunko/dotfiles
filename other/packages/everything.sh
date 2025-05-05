@@ -19,4 +19,14 @@ wget https://hatsune-miku.has.rocks/r/pape.jpg -O pape.jpg
 wal -i pape.jpg
 nitrogen --set-auto pape.jpg
 
+echo "> Setting up SDDM."
+yay -S sddm --needed
+yay -S sddm-lain-wired-theme
+sudo tee /etc/sddm.conf > /dev/null <<EOF
+[Theme]
+Current=sddm-lain-wired-theme
+EOF
+systemctl enable sddm
+
+
 echo "> Welp, that's all I can do, I'll leave everything up to you.'"
