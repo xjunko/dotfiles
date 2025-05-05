@@ -3,7 +3,7 @@ export ZSH="$HOME/.oh-my-zsh"
 
 # configurations
 ZSH_THEME="smt"
-plugins=(git zsh-autosuggestions zsh-syntax-highlighting fast-syntax-highlighting zsh-autocomplete)
+plugins=(git)
 
 # start omz
 source $ZSH/oh-my-zsh.sh
