@@ -9,9 +9,11 @@
 "display": {
         "key": {"width": 11},
         "bar": {
-            "charElapsed": "=",
-            "charTotal": "-",
-            "width": 13
+            "char": {
+                "elapsed": "=",
+                "total": "-",
+                "width": 13
+            },
         },
         "percent": {
             "type": 2
