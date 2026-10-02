@@ -1,6 +1,8 @@
 -- cursor
 hl.env("XCURSOR_SIZE", "24")
 hl.env("HYPRCURSOR_SIZE", "24")
+hl.env("HYPRCURSOR_THEME", "Miku Cursor")
+
 
 -- nvidia
 hl.env("LIBVA_DRIVER_NAME", "nvidia")
@@ -18,6 +20,8 @@ hl.env("QT_QPA_PLATFORMTHEME", "hyprqt6engine")
 hl.env("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1")
 hl.env("QT_AUTO_SCREEN_SCALE_FACTOR", "1")
 hl.env("QT_STYLE_OVERRIDE", "kvantum")
+
+
 
 -- keyboard
 hl.config({
