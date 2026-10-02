@@ -1,0 +1,8 @@
+require("modules.screen")
+require("modules.env")
+require("modules.perm")
+require("modules.visual")
+require("modules.layout")
+require("modules.bind")
+require("modules.rules")
+require("modules.colors")

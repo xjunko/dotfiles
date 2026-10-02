@@ -1,0 +1,93 @@
+/*
+ *
+ * It is generally better to configure device-specific settings,
+ * such as font family and font size,
+ * in a separate "specific.css" file, which allows the configuration
+ * to be portable between different machines with minimal effort.
+ * Following is an example of device-specific configuration:
+ *
+ * {
+ *    font-family: "Iosevka Fixed Extended";
+ *    font-size: 16px;
+ * }
+ *
+ * The "specific.css" file must be placed inside of this directory
+ * to be detected. The following line can be edited
+ * to change the path (or name) of the file.
+ *
+ */
+@import url("specific.css");
+@import url("/home/reze/.cache/wal/colors-waybar.css");
+
+* {
+  border: none;
+}
+
+.modules-right {
+  padding-right: 10px;
+}
+
+.modules-left {
+  padding-left: 2px;
+}
+
+window#waybar {
+  background: black;
+  border-bottom: 0px transparent;
+  color: white;
+}
+
+#window {
+color: lime;
+}
+
+tooltip {
+  background: @background;
+  border: 1px solid @color1;
+}
+tooltip label {
+  color: white;
+}
+
+#workspaces button {
+padding: 0 6px;
+margin: 2 2px;
+background: @color0;
+color: gray;
+border: 1px solid @color6;
+border-radius: 0;
+}
+
+#workspaces button.active {
+color: white;
+background: @color6;
+border: 1px solid @color0;
+}
+
+#mode {
+background: #64727D;
+border-bottom: 3px solid white;
+}
+
+#memory {color: @color15;}
+#memory.warning {color: @color6;}
+#memory.critical {color: @color1;}
+
+#battery {color: @color15;}
+#battery.warning {color: @color6;}
+#battery.critical {color: @color1;}
+#battery.charging {color: @color14;}
+
+@keyframes blink {
+  to {
+    background-color: #ffffff;
+    color: black;
+  }
+}
+
+#network {color: @color15}
+#network.disconnected {color: @color1}
+
+#cpu {color: @color15}
+#cpu.warning {color: @color6}
+#cpu.critical {color: @color1}
