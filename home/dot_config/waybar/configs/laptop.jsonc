@@ -1,0 +1,25 @@
+{
+    "modules-right": [
+        "tray",
+        "custom/separator",
+        "group/cpu",
+        "custom/separator",
+        "memory",
+        "custom/separator",
+        "pulseaudio",
+        "custom/separator",
+        "clock"
+    ],
+    "temperature#cpu": {
+        "format": "{}",
+        "rewrite": {
+            "": "void"
+        }
+    },
+    "custom/gpu": {
+        "format": "{}",
+        "rewrite": {
+            "": "void"
+        }
+    }
+}

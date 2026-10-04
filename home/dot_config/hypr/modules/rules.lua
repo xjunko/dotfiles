@@ -54,3 +54,14 @@ hl.window_rule({
     border_size = 0,
     rounding = 0,
 })
+
+-- sober (roblox)
+hl.window_rule({
+    name = "sober-mouse-lock",
+    match = { class = "^(org.vinegarhq.Sober)$" },
+    confine_pointer = true
+})
+
+-- cursor fix
+hl.window_rule(
+    { match = { content = "game", fullscreen = true }, confine_pointer = true })

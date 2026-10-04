@@ -1,21 +1,7 @@
-// It is generally better to configure device-specific settings,
-// such as network interfaces,
-// in a separate "specific.jsonc" file, which allows the configuration
-// to be portable between different machines with minimal effort.
-// Following is an example of device-specific configuration:
-//
-// {
-//     "network": {
-//         "interface": "eno1"
-//     }
-// }
-//
-// The "specific.jsonc" file must be placed inside of this directory
-// to be detected. The following line can be edited
-// to change the path (or name) of the file.
 {
     "include": [
-        "./specific.jsonc"
+        // "./configs/laptop.jsonc"
+        "./configs/desktop.jsonc"
     ],
     "custom/separator": {
         "format": "<span color='#808080'><b> | </b></span>"
@@ -27,21 +13,20 @@
     "modules-left": [
         "hyprland/workspaces"
     ],
-    "modules-right": [
-        "tray",
-        "custom/separator",
-        "battery",
-        "custom/separator",
-        "network",
-        "custom/separator",
-        "cpu",
-        "custom/separator",
-        "memory",
-        "custom/separator",
-        "pulseaudio",
-        "custom/separator",
-        "clock"
-    ],
+    "group/cpu": {
+        "orientation": "inherit",
+        "modules": [
+            "cpu",
+            "temperature#cpu"
+        ]
+    },
+    "group/gpu": {
+        "orientation": "inherit",
+        "modules": [
+            "custom/gpu",
+            "temperature#gpu"
+        ]
+    },
     "fixed-center": false,
     "battery": {
         "states": {
@@ -52,8 +37,7 @@
         "format-charging": "{capacity}%"
     },
     "clock": {
-        "format": "{:%d.%m.%y (%a) %T}",
-        "format-alt": "{:%A, %B %d, %Y (%R)}",
+        "format": "{:%d.%m.%y %I:%M %p}",
         "tooltip-format": "<tt><small>{calendar}</small></tt>",
         "interval": 1,
         "calendar": {
@@ -65,11 +49,8 @@
                 "days": "<span color='#ffffff'>{}</span>",
                 "weeks": "<span color='#99ffdd'><b>W{}</b></span>",
                 "weekdays": "<span color='#ff00ff'>{}</span>",
-                "today": "<span color='#00ff00'><b>{}</b></span>",
+                "today": "<span color='#00ff00'><b>{}</b></span>"
             }
-        },
-        "actions": {
-            "on-click-right": "mode"
         }
     },
     "pulseaudio": {

@@ -16,8 +16,8 @@
  * to change the path (or name) of the file.
  *
  */
-@import url("specific.css");
-@import url("/home/reze/.cache/wal/colors-waybar.css");
+@import url("styles/specific.css");
+@import url("../../.cache/wal/colors-waybar.css");
 
 * {
     border: none;
@@ -123,6 +123,26 @@ tooltip label {
 
 #cpu.critical {
     color: @color1
+}
+
+#custom-gpu {
+color: @color15;
+}
+
+#custom-gpu.warning {
+color: @color6;
+}
+
+#custom-gpu.critical {
+color: @color1;
+}
+
+#temperature {
+color: @color15;
+}
+
+#temperature.critical {
+color: @color1;
 }
 
 #tray {

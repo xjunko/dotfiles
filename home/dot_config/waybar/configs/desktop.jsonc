@@ -1,0 +1,29 @@
+{
+    "modules-right": [
+        "tray",
+        "custom/separator",
+        "group/cpu",
+        "custom/separator",
+        "group/gpu",
+        "custom/separator",
+        "memory",
+        "custom/separator",
+        "pulseaudio",
+        "custom/separator",
+        "clock"
+    ],
+    "temperature#cpu": {
+        "hwmon-path": "/sys/class/hwmon/hwmon1/temp1_input",
+        "format": " ({temperatureC}°C)",
+        "critical-threshold": 85
+    },
+    "temperature#gpu": {
+        "hwmon-path": "/sys/class/hwmon/hwmon0/temp1_input",
+        "format": " ({temperatureC}°C)",
+        "critical-threshold": 85
+    },
+    "custom/gpu": {
+        "exec": "echo \"GPU $(cat /sys/class/drm/card1/device/gpu_busy_percent)%\"",
+        "interval": 2
+    },
+}
