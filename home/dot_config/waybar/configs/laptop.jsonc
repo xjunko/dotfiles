@@ -2,6 +2,8 @@
     "modules-right": [
         "tray",
         "custom/separator",
+        "battery",
+        "custom/separator",
         "group/cpu",
         "custom/separator",
         "memory",
@@ -10,6 +12,14 @@
         "custom/separator",
         "clock"
     ],
+    "battery": {
+        "states": {
+            "warning": 50,
+            "critical": 25
+        },
+        "format-discharging": "{capacity}%",
+        "format-charging": "{capacity}%"
+    },
     "temperature#cpu": {
         "hwmon-path": "/sys/class/hwmon/hwmon1/temp1_input",
         "format": " ({temperatureC}°C)",

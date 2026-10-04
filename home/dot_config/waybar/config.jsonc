@@ -1,7 +1,7 @@
 {
     "include": [
-        // "./configs/laptop.jsonc"
-        "./configs/desktop.jsonc"
+        //"./configs/laptop.jsonc"
+        //"./configs/desktop.jsonc"
     ],
     "custom/separator": {
         "format": "<span color='#808080'><b> | </b></span>"
@@ -28,14 +28,6 @@
         ]
     },
     "fixed-center": false,
-    "battery": {
-        "states": {
-            "warning": 50,
-            "critical": 25
-        },
-        "format-discharging": "{capacity}%",
-        "format-charging": "{capacity}%"
-    },
     "clock": {
         "format": "{:%d.%m.%y %I:%M %p}",
         "tooltip-format": "<tt><small>{calendar}</small></tt>",
