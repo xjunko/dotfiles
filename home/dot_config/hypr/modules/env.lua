@@ -4,6 +4,13 @@ hl.env("XCURSOR_THEME", "miku-cursor-linux")
 hl.env("HYPRCURSOR_SIZE", "24")
 hl.env("HYPRCURSOR_THEME", "miku-cursor-linux")
 
+-- apparently this is required, sometimes...
+hl.on("hyprland.start", function()
+    hl.exec_cmd("hyprctl setcursor miku-cursor-linux 24")
+    hl.exec_cmd("gsettings set org.gnome.desktop.interface cursor-theme 'miku-cursor-linux'")
+    hl.exec_cmd("gsettings set org.gnome.desktop.interface cursor-size 24")
+end)
+
 -- cef
 hl.env("ELECTRON_OZONE_PLATFORM_HINT", "auto")
 
