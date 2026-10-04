@@ -11,6 +11,11 @@
         "clock"
     ],
     "temperature#cpu": {
+        "hwmon-path": "/sys/class/hwmon/hwmon1/temp1_input",
+        "format": " ({temperatureC}°C)",
+        "critical-threshold": 85
+    },
+    "temperature#gpu": {
         "format": "{}",
         "rewrite": {
             "": "void"
