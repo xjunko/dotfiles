@@ -5,6 +5,7 @@ paru -S --needed \
     hyprland \
     hyprland-qt-support \
     hyprlauncher \
+    hypridle \
     hyprlock \
     hyprpaper \
     hyprpolkitagent \
@@ -17,6 +18,14 @@ paru -S --needed \
     qt5ct \
     qt6ct \
     kvantum
+
+# breeze
+paru -S --needed \
+    breeze \
+    breeze5 \
+    breeze-gtk \
+    breeze-icons \
+    breeze-cursors
 
 # audio
 paru -S --needed \
@@ -51,4 +60,9 @@ paru -S --needed \
     noto-fonts-emoji
 
 # polkit
+systemctl --user enable --now hyprpolkitagent.service
+
+# other services
+systemctl --user enable --now hyprpaper.service
+systemctl --user enable --now hypridle.service
 systemctl --user enable --now hyprpolkitagent.service
