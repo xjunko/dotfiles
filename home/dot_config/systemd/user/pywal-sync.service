@@ -1,0 +1,6 @@
+[Unit]
+Description=Sync KDE/Qt/GTK colors and Breeze icon accents with pywal
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/pywal-sync

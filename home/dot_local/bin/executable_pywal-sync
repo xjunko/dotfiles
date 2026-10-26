@@ -1,0 +1,814 @@
+#!/usr/bin/env python3
+"""Sync KDE, Qt and GTK colors (and Breeze icon accents) with pywal.
+
+Everything is derived from ~/.cache/wal/colors.json on every run, so changing
+the wallpaper with `wal -i <image>` updates the whole desktop palette.
+
+Optional config (~/.config/pywal-sync.conf):
+
+    [colors]
+    accent = color5        ; color0..color15, or a literal #rrggbb
+"""
+
+from __future__ import annotations
+
+import argparse
+import configparser
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+HOME = Path.home()
+CONFIG_HOME = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config")
+DATA_HOME = Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local/share")
+CACHE_HOME = Path(os.environ.get("XDG_CACHE_HOME") or HOME / ".cache")
+
+WAL_JSON = CACHE_HOME / "wal/colors.json"
+WAL_SEQ = CACHE_HOME / "wal/colors"
+CONF = CONFIG_HOME / "pywal-sync.conf"
+
+ICON_SRC = Path("/usr/share/icons/breeze-dark")
+ICON_DST = DATA_HOME / "icons/breeze-dark-wal"
+ICON_STAMP = CACHE_HOME / "wal/breeze-dark-wal.stamp"
+
+KDE_GLOBALS = CONFIG_HOME / "kdeglobals"
+KDE_SCHEME = DATA_HOME / "color-schemes/Pywal.colors"
+QT5_CONF = CONFIG_HOME / "qt5ct/qt5ct.conf"
+QT6_CONF = CONFIG_HOME / "qt6ct/qt6ct.conf"
+QT5_COLORS = CONFIG_HOME / "qt5ct/style-colors.conf"
+QT6_COLORS = CONFIG_HOME / "qt6ct/style-colors.conf"
+GTK3_DIR = CONFIG_HOME / "gtk-3.0"
+GTK4_DIR = CONFIG_HOME / "gtk-4.0"
+GTK3_CSS = GTK3_DIR / "gtk.css"
+GTK4_CSS = GTK4_DIR / "gtk.css"
+BREEZE_GTK3 = Path("/usr/share/themes/Breeze-Dark/gtk-3.0/gtk.css")
+BREEZE_GTK4 = Path("/usr/share/themes/Breeze-Dark/gtk-4.0/gtk.css")
+XSETTINGSD = CONFIG_HOME / "xsettingsd/xsettingsd.conf"
+HYPRQT6 = CONFIG_HOME / "hypr/hyprqt6engine.conf"
+
+ICON_THEME_NAME = "breeze-dark-wal"
+KDE_ICON_THEME = "breeze-dark"
+SCHEME_NAME = "Pywal"
+
+
+# --------------------------------------------------------------------------
+# color helpers
+# --------------------------------------------------------------------------
+
+def hx(value: str) -> tuple[int, int, int]:
+    value = value.strip().lstrip("#")
+    if len(value) == 8:  # aarrggbb
+        value = value[2:]
+    return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
+
+
+def to_hex(rgb: tuple[float, float, float]) -> str:
+    return "#%02x%02x%02x" % tuple(max(0, min(255, round(c))) for c in rgb)
+
+
+def mix(a: str, b: str, t: float) -> str:
+    ca, cb = hx(a), hx(b)
+    return to_hex(tuple(ca[i] * (1 - t) + cb[i] * t for i in range(3)))
+
+
+def rgba(color: str, alpha: float) -> str:
+    r, g, b = hx(color)
+    return f"rgba({r}, {g}, {b}, {alpha:g})"
+
+
+def _linear(c: float) -> float:
+    c /= 255.0
+    return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def luminance(color: str) -> float:
+    r, g, b = hx(color)
+    return 0.2126 * _linear(r) + 0.7152 * _linear(g) + 0.0722 * _linear(b)
+
+
+def contrast(a: str, b: str) -> float:
+    la, lb = luminance(a), luminance(b)
+    hi, lo = max(la, lb), min(la, lb)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def readable_on(color: str, dark: str, light: str = "#ffffff") -> str:
+    return dark if contrast(color, dark) >= contrast(color, light) else light
+
+
+# --------------------------------------------------------------------------
+# pywal input
+# --------------------------------------------------------------------------
+
+def load_wal() -> tuple[dict[str, str], str, str]:
+    if WAL_JSON.exists():
+        data = json.loads(WAL_JSON.read_text())
+        colors = {k.lower(): v for k, v in data.get("colors", {}).items()}
+        special = data.get("special", {})
+        bg = colors.get("color0") or special.get("background") or "#000000"
+        fg = special.get("foreground") or colors.get("color7") or "#ffffff"
+        return colors, bg, fg
+
+    if WAL_SEQ.exists():
+        values = [ln.strip() for ln in WAL_SEQ.read_text().splitlines() if ln.strip().startswith("#")]
+        if len(values) >= 16:
+            colors = {f"color{i}": values[i] for i in range(16)}
+            return colors, colors["color0"], colors["color7"]
+
+    raise SystemExit("pywal-sync: no ~/.cache/wal/colors.json; run wal first")
+
+
+def load_accent(colors: dict[str, str], bg: str) -> str:
+    preferred = "color5"
+    if CONF.exists():
+        cfg = configparser.ConfigParser(interpolation=None)
+        cfg.read(CONF)
+        preferred = cfg.get("colors", "accent", fallback=preferred).strip()
+
+    if preferred.startswith("#"):
+        return preferred
+
+    candidates = [preferred, "color5", "color4", "color6", "color3"]
+    seen = set()
+    for key in candidates:
+        if key in seen or key not in colors:
+            continue
+        seen.add(key)
+        if contrast(colors[key], bg) >= 2.0:
+            return colors[key]
+
+    return colors.get(preferred, colors.get("color5", "#ffffff"))
+
+
+# --------------------------------------------------------------------------
+# palette
+# --------------------------------------------------------------------------
+
+def build_palette(colors: dict[str, str], bg: str, fg: str, accent: str) -> dict[str, str]:
+    p: dict[str, str] = {}
+    p["bg"] = bg
+    p["bg_alt"] = mix(bg, colors.get("color8", fg), 0.22)
+    p["bg_hi"] = mix(bg, colors.get("color8", fg), 0.38)
+    p["fg"] = fg
+    p["fg_dim"] = mix(fg, bg, 0.45)
+    p["fg_mid"] = mix(fg, bg, 0.25)
+    p["accent"] = accent
+    p["accent_fg"] = readable_on(accent, bg)
+    p["accent_dim"] = mix(accent, bg, 0.5)
+    p["accent_soft"] = mix(accent, bg, 0.25)
+    p["border"] = mix(bg, fg, 0.16)
+    p["border_soft"] = mix(bg, fg, 0.09)
+    p["button"] = p["bg_hi"]
+    p["button_alt"] = p["bg_alt"]
+    p["error"] = colors.get("color1", "#ff5555")
+    p["success"] = colors.get("color2", "#55ff55")
+    p["warning"] = colors.get("color3", "#ffff55")
+    p["link"] = colors.get("color4", accent)
+    p["link_visited"] = mix(colors.get("color4", accent), fg, 0.4)
+    p["shadow"] = mix(bg, "#000000", 0.45)
+    p["titlebar"] = p["bg_alt"]
+    p["tooltip_bg"] = p["bg_hi"]
+    return p
+
+
+# --------------------------------------------------------------------------
+# KDE
+# --------------------------------------------------------------------------
+
+def kde_group(p: dict[str, str], bg: str, bg_alt: str, fg: str, accent: str | None = None) -> dict[str, str]:
+    accent = accent or p["accent"]
+    return {
+        "BackgroundNormal": bg,
+        "BackgroundAlternate": bg_alt,
+        "DecorationFocus": accent,
+        "DecorationHover": accent,
+        "ForegroundNormal": fg,
+        "ForegroundInactive": p["fg_dim"],
+        "ForegroundActive": accent,
+        "ForegroundLink": p["link"],
+        "ForegroundVisited": p["link_visited"],
+        "ForegroundNegative": p["error"],
+        "ForegroundNeutral": p["warning"],
+        "ForegroundPositive": p["success"],
+    }
+
+
+def kde_sections(p: dict[str, str]) -> dict[str, dict[str, str]]:
+    sections: dict[str, dict[str, str]] = {}
+    sections["General"] = {"ColorScheme": SCHEME_NAME, "Name": SCHEME_NAME.lower()}
+    sections["KDE"] = {"contrast": "4"}
+    sections["Colors:Button"] = kde_group(p, p["button"], p["bg_alt"], p["fg"])
+    sections["Colors:Complementary"] = kde_group(p, p["bg"], p["bg_alt"], p["fg"])
+    sections["Colors:Header"] = kde_group(p, p["bg_alt"], p["bg"], p["fg"])
+    sections["Colors:Header][Inactive"] = kde_group(p, p["bg_alt"], p["bg"], p["fg_dim"])
+    sections["Colors:Selection"] = kde_group(p, p["accent"], p["button"], p["accent_fg"])
+    sections["Colors:Tooltip"] = kde_group(p, p["tooltip_bg"], p["bg"], p["fg"])
+    sections["Colors:View"] = kde_group(p, p["bg"], p["bg_alt"], p["fg"])
+    sections["Colors:Window"] = kde_group(p, p["bg"], p["bg_alt"], p["fg"])
+    sections["WM"] = {
+        "activeBackground": p["titlebar"],
+        "activeBlend": p["accent"],
+        "activeForeground": p["fg"],
+        "inactiveBackground": p["bg"],
+        "inactiveBlend": p["fg_dim"],
+        "inactiveForeground": p["fg_dim"],
+    }
+    return sections
+
+
+def kde_effects() -> dict[str, dict[str, str]]:
+    defaults = {
+        "ColorEffects:Disabled": {
+            "Color": "56,56,56",
+            "ColorAmount": "0",
+            "ColorEffect": "0",
+            "ContrastAmount": "0.65",
+            "ContrastEffect": "1",
+            "IntensityAmount": "0.1",
+            "IntensityEffect": "2",
+        },
+        "ColorEffects:Inactive": {
+            "ChangeSelectionColor": "true",
+            "Color": "112,112,112",
+            "ColorAmount": "0.025",
+            "ColorEffect": "2",
+            "ContrastAmount": "0.1",
+            "ContrastEffect": "2",
+            "Enable": "false",
+            "IntensityAmount": "0",
+            "IntensityEffect": "0",
+        },
+    }
+    if not KDE_GLOBALS.exists():
+        return defaults
+    cfg = configparser.RawConfigParser(strict=False, interpolation=None)
+    cfg.optionxform = str
+    cfg.read(KDE_GLOBALS)
+    out: dict[str, dict[str, str]] = {}
+    for section, fallback in defaults.items():
+        out[section] = dict(cfg[section]) if cfg.has_section(section) else fallback
+    return out
+
+
+def write_kde_scheme(p: dict[str, str], effects: dict[str, dict[str, str]]) -> None:
+    sections = kde_sections(p)
+    ordered: dict[str, dict[str, str]] = {}
+    ordered["General"] = sections["General"]
+    ordered["KDE"] = sections["KDE"]
+    ordered.update(effects)
+    for key in (
+        "Colors:Button", "Colors:Complementary", "Colors:Header",
+        "Colors:Header][Inactive", "Colors:Selection", "Colors:Tooltip",
+        "Colors:View", "Colors:Window", "WM",
+    ):
+        ordered[key] = sections[key]
+
+    lines: list[str] = []
+    for section, values in ordered.items():
+        lines.append(f"[{section}]")
+        for key, value in values.items():
+            lines.append(f"{key}={value}")
+        lines.append("")
+    KDE_SCHEME.parent.mkdir(parents=True, exist_ok=True)
+    KDE_SCHEME.write_text("\n".join(lines))
+
+
+def backup_once(path: Path) -> None:
+    if path.exists() and not path.with_suffix(path.suffix + ".pywal-sync.bak").exists():
+        shutil.copy2(path, path.with_suffix(path.suffix + ".pywal-sync.bak"))
+
+
+def merge_kdeglobals(p: dict[str, str]) -> None:
+    KDE_GLOBALS.parent.mkdir(parents=True, exist_ok=True)
+    backup_once(KDE_GLOBALS)
+    cfg = configparser.RawConfigParser(strict=False, interpolation=None)
+    cfg.optionxform = str
+    cfg.read(KDE_GLOBALS)
+
+    for section, values in kde_sections(p).items():
+        if not cfg.has_section(section):
+            cfg.add_section(section)
+        for key, value in values.items():
+            cfg.set(section, key, value)
+
+    cfg.set("General", "ColorScheme", SCHEME_NAME)
+    cfg.set("General", "Name", SCHEME_NAME.lower())
+    if not cfg.has_section("Icons"):
+        cfg.add_section("Icons")
+    cfg.set("Icons", "Theme", KDE_ICON_THEME)
+
+    with KDE_GLOBALS.open("w") as fh:
+        cfg.write(fh, space_around_delimiters=False)
+
+
+# --------------------------------------------------------------------------
+# Qt
+# --------------------------------------------------------------------------
+
+def qt_roles(p: dict[str, str]) -> dict[str, str]:
+    return {
+        "WindowText": p["fg"],
+        "Button": p["button"],
+        "Light": mix(p["button"], p["fg"], 0.25),
+        "Midlight": mix(p["button"], p["fg"], 0.12),
+        "Dark": mix(p["button"], "#000000", 0.35),
+        "Mid": mix(p["button"], "#000000", 0.18),
+        "Text": p["fg"],
+        "BrightText": mix(p["fg"], "#ffffff", 0.6),
+        "ButtonText": p["fg"],
+        "Base": p["bg"],
+        "Window": p["bg"],
+        "Shadow": p["shadow"],
+        "Highlight": p["accent"],
+        "HighlightedText": p["accent_fg"],
+        "Link": p["link"],
+        "LinkVisited": p["link_visited"],
+        "AlternateBase": p["bg_alt"],
+        "NoRole": "#000000",
+        "ToolTipBase": p["tooltip_bg"],
+        "ToolTipText": p["fg"],
+        "PlaceholderText": p["fg_dim"],
+        "Accent": p["accent"],
+    }
+
+
+QT_ORDER = [
+    "WindowText", "Button", "Light", "Midlight", "Dark", "Mid", "Text",
+    "BrightText", "ButtonText", "Base", "Window", "Shadow", "Highlight",
+    "HighlightedText", "Link", "LinkVisited", "AlternateBase", "NoRole",
+    "ToolTipBase", "ToolTipText", "PlaceholderText", "Accent",
+]
+
+# Qt5 has no Accent role
+QT5_ORDER = QT_ORDER[:-1]
+
+
+def qt_line(roles: dict[str, str], order: list[str], dim: bool = False) -> str:
+    values = []
+    for role in order:
+        color = roles[role]
+        if dim:
+            if role in {"WindowText", "Text", "ButtonText", "BrightText", "ToolTipText", "PlaceholderText"}:
+                color = mix(color, roles["Base"], 0.55)
+            elif role in {"Highlight", "Accent"}:
+                color = mix(color, roles["Base"], 0.5)
+            elif role in {"Button", "Light", "Midlight", "Dark", "Mid", "Window", "AlternateBase", "ToolTipBase"}:
+                color = mix(color, roles["Base"], 0.35)
+        r, g, b = hx(color)
+        values.append(f"#ff{r:02x}{g:02x}{b:02x}")
+    return ", ".join(values)
+
+
+def write_qt_colors(path: Path, p: dict[str, str], order: list[str]) -> None:
+    roles = qt_roles(p)
+    text = (
+        "[ColorScheme]\n"
+        f"active_colors={qt_line(roles, order)}\n"
+        f"inactive_colors={qt_line(roles, order)}\n"
+        f"disabled_colors={qt_line(roles, order, dim=True)}\n"
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+
+
+def set_ini_keys(path: Path, section: str, values: dict[str, str]) -> None:
+    """Set keys in an INI section without rewriting the rest of the file.
+
+    KConfig files can contain @ByteArray(...) values with backslashes; a
+    line-based update keeps them byte-for-byte intact.
+    """
+    text = path.read_text() if path.exists() else ""
+    lines = text.splitlines()
+    sec_re = re.compile(rf"^\[{re.escape(section)}\]\s*$")
+    start = next((i for i, line in enumerate(lines) if sec_re.match(line)), None)
+    if start is None:
+        if lines and lines[-1].strip():
+            lines.append("")
+        lines.append(f"[{section}]")
+        start = len(lines) - 1
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].lstrip().startswith("[")), len(lines))
+    for key, value in values.items():
+        key_re = re.compile(rf"^{re.escape(key)}=")
+        found = next((i for i in range(start + 1, end) if key_re.match(lines[i])), None)
+        if found is not None:
+            lines[found] = f"{key}={value}"
+        else:
+            lines.insert(end, f"{key}={value}")
+            end += 1
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n")
+
+
+def configure_qt() -> None:
+    for conf, colors in ((QT5_CONF, QT5_COLORS), (QT6_CONF, QT6_COLORS)):
+        set_ini_keys(
+            conf,
+            "Appearance",
+            {
+                "icon_theme": ICON_THEME_NAME,
+                "custom_palette": "true",
+                "color_scheme_path": str(colors),
+            },
+        )
+
+
+# --------------------------------------------------------------------------
+# GTK
+# --------------------------------------------------------------------------
+
+def gtk_named_colors(p: dict[str, str]) -> dict[str, str]:
+    bg, bg_alt, bg_hi = p["bg"], p["bg_alt"], p["bg_hi"]
+    fg, fg_dim = p["fg"], p["fg_dim"]
+    accent, accent_fg = p["accent"], p["accent_fg"]
+    accent_dim, accent_soft = p["accent_dim"], p["accent_soft"]
+    border, border_soft = p["border"], p["border_soft"]
+    button, button_alt = p["button"], p["button_alt"]
+    error, warning, success = p["error"], p["warning"], p["success"]
+    link, link_visited = p["link"], p["link_visited"]
+    titlebar, tooltip_bg = p["titlebar"], p["tooltip_bg"]
+    dim = lambda c: mix(c, bg, 0.5)  # noqa: E731
+
+    return {
+        "theme_fg_color_breeze": fg,
+        "theme_text_color_breeze": fg,
+        "theme_bg_color_breeze": bg,
+        "theme_base_color_breeze": bg,
+        "theme_view_hover_decoration_color_breeze": accent,
+        "theme_hovering_selected_bg_color_breeze": accent,
+        "theme_selected_bg_color_breeze": accent,
+        "theme_selected_fg_color_breeze": accent_fg,
+        "theme_view_active_decoration_color_breeze": accent,
+        "insensitive_selected_bg_color_breeze": rgba(accent, 0.35),
+        "insensitive_bg_color_breeze": bg,
+        "insensitive_fg_color_breeze": rgba(fg, 0.35),
+        "insensitive_base_color_breeze": bg,
+        "insensitive_base_fg_color_breeze": fg_dim,
+        "insensitive_selected_fg_color_breeze": rgba(fg, 0.35),
+        "theme_unfocused_fg_color_breeze": fg,
+        "theme_unfocused_text_color_breeze": fg,
+        "theme_unfocused_bg_color_breeze": bg,
+        "theme_unfocused_base_color_breeze": bg,
+        "theme_unfocused_selected_bg_color_alt_breeze": accent,
+        "theme_unfocused_selected_bg_color_breeze": rgba(accent, 0.5),
+        "theme_unfocused_selected_fg_color_breeze": accent_fg,
+        "insensitive_unfocused_selected_bg_color_breeze": rgba(accent, 0.2),
+        "insensitive_unfocused_fg_color_breeze": fg_dim,
+        "insensitive_unfocused_bg_color_breeze": bg,
+        "insensitive_unfocused_selected_fg_color_breeze": fg_dim,
+        "theme_unfocused_view_text_color_breeze": fg,
+        "theme_unfocused_view_bg_color_breeze": bg,
+        "borders_breeze": border,
+        "unfocused_borders_breeze": border_soft,
+        "insensitive_borders_breeze": border_soft,
+        "unfocused_insensitive_borders_breeze": border_soft,
+        "theme_button_background_normal_breeze": button,
+        "theme_button_decoration_hover_breeze": accent,
+        "theme_button_decoration_focus_breeze": accent,
+        "theme_button_foreground_normal_breeze": fg,
+        "theme_button_foreground_active_breeze": accent_fg,
+        "theme_button_background_insensitive_breeze": button_alt,
+        "theme_button_decoration_hover_insensitive_breeze": accent_dim,
+        "theme_button_decoration_focus_insensitive_breeze": accent_dim,
+        "theme_button_foreground_insensitive_breeze": fg_dim,
+        "theme_button_foreground_active_insensitive_breeze": fg_dim,
+        "theme_button_background_backdrop_breeze": button_alt,
+        "theme_button_decoration_hover_backdrop_breeze": accent_dim,
+        "theme_button_decoration_focus_backdrop_breeze": accent_dim,
+        "theme_button_foreground_backdrop_breeze": fg,
+        "theme_button_foreground_active_backdrop_breeze": accent_fg,
+        "theme_button_background_backdrop_insensitive_breeze": button_alt,
+        "theme_button_decoration_hover_backdrop_insensitive_breeze": accent_dim,
+        "theme_button_decoration_focus_backdrop_insensitive_breeze": accent_dim,
+        "theme_button_foreground_backdrop_insensitive_breeze": fg_dim,
+        "theme_button_foreground_active_backdrop_insensitive_breeze": fg_dim,
+        "warning_color_breeze": warning,
+        "error_color_breeze": error,
+        "success_color_breeze": success,
+        "warning_color_backdrop_breeze": warning,
+        "error_color_backdrop_breeze": error,
+        "success_color_backdrop_breeze": success,
+        "warning_color_insensitive_breeze": dim(warning),
+        "error_color_insensitive_breeze": dim(error),
+        "success_color_insensitive_breeze": dim(success),
+        "warning_color_insensitive_backdrop_breeze": dim(warning),
+        "error_color_insensitive_backdrop_breeze": dim(error),
+        "success_color_insensitive_backdrop_breeze": dim(success),
+        "link_color_breeze": link,
+        "link_visited_color_breeze": link_visited,
+        "theme_titlebar_background_breeze": titlebar,
+        "theme_titlebar_foreground_breeze": fg,
+        "theme_titlebar_background_light_breeze": mix(titlebar, fg, 0.08),
+        "theme_titlebar_foreground_backdrop_breeze": fg_dim,
+        "theme_titlebar_background_backdrop_breeze": bg,
+        "theme_titlebar_foreground_insensitive_breeze": fg_dim,
+        "theme_titlebar_foreground_insensitive_backdrop_breeze": fg_dim,
+        "tooltip_text_breeze": fg,
+        "tooltip_background_breeze": tooltip_bg,
+        "tooltip_border_breeze": border,
+        "print_paper_backdrop_breeze": "#ffffff",
+        "content_view_bg_breeze": bg,
+        "theme_fg_color": fg,
+        "theme_text_color": fg,
+        "theme_bg_color": bg,
+        "theme_base_color": bg,
+        "theme_selected_bg_color": accent,
+        "theme_selected_fg_color": accent_fg,
+        "insensitive_bg_color": bg,
+        "insensitive_fg_color": fg_dim,
+        "insensitive_base_color": bg,
+        "theme_unfocused_fg_color": fg,
+        "theme_unfocused_text_color": fg,
+        "theme_unfocused_bg_color": bg,
+        "theme_unfocused_base_color": bg,
+        "theme_unfocused_selected_bg_color": accent,
+        "theme_unfocused_selected_fg_color": accent_fg,
+        "unfocused_insensitive_color": fg_dim,
+        "borders": border,
+        "unfocused_borders": border_soft,
+        "warning_color": warning,
+        "error_color": error,
+        "success_color": success,
+        "content_view_bg": bg,
+        "text_view_bg": bg,
+    }
+
+
+def adwaita_colors(p: dict[str, str]) -> dict[str, str]:
+    bg, bg_alt, fg = p["bg"], p["bg_alt"], p["fg"]
+    accent, accent_fg = p["accent"], p["accent_fg"]
+    error, warning, success = p["error"], p["warning"], p["success"]
+    titlebar = p["titlebar"]
+    return {
+        "accent_color": accent,
+        "accent_bg_color": accent,
+        "accent_fg_color": accent_fg,
+        "destructive_color": error,
+        "destructive_bg_color": error,
+        "destructive_fg_color": readable_on(error, bg),
+        "success_color": success,
+        "success_bg_color": success,
+        "success_fg_color": readable_on(success, bg),
+        "warning_color": warning,
+        "warning_bg_color": warning,
+        "warning_fg_color": readable_on(warning, bg),
+        "error_color": error,
+        "error_bg_color": error,
+        "error_fg_color": readable_on(error, bg),
+        "window_bg_color": bg,
+        "window_fg_color": fg,
+        "view_bg_color": bg,
+        "view_fg_color": fg,
+        "headerbar_bg_color": titlebar,
+        "headerbar_fg_color": fg,
+        "headerbar_border_color": p["border"],
+        "headerbar_backdrop_color": bg,
+        "headerbar_shade_color": "rgba(0, 0, 0, 0.2)",
+        "card_bg_color": bg_alt,
+        "card_fg_color": fg,
+        "card_shade_color": "rgba(0, 0, 0, 0.2)",
+        "dialog_bg_color": bg_alt,
+        "dialog_fg_color": fg,
+        "popover_bg_color": bg_alt,
+        "popover_fg_color": fg,
+        "popover_shade_color": "rgba(0, 0, 0, 0.2)",
+        "sidebar_bg_color": bg_alt,
+        "sidebar_fg_color": fg,
+        "sidebar_backdrop_color": bg,
+        "sidebar_shade_color": "rgba(0, 0, 0, 0.2)",
+        "secondary_sidebar_bg_color": bg,
+        "secondary_sidebar_fg_color": fg,
+        "thumbnail_bg_color": bg_alt,
+        "thumbnail_fg_color": fg,
+        "shade_color": "rgba(0, 0, 0, 0.2)",
+        "scrollbar_outline_color": "rgba(0, 0, 0, 0.5)",
+    }
+
+
+def css_block(colors: dict[str, str], header: str) -> str:
+    lines = [f"/* {header} - generated by pywal-sync */"]
+    for name, value in colors.items():
+        lines.append(f"@define-color {name} {value};")
+    return "\n".join(lines) + "\n"
+
+
+def ensure_gtk_assets() -> None:
+    """The copied Breeze GTK4 CSS references ../assets; keep that resolvable."""
+    assets = CONFIG_HOME / "assets"
+    target = Path("/usr/share/themes/Breeze-Dark/assets")
+    if target.exists() and not assets.exists() and not assets.is_symlink():
+        assets.symlink_to(target)
+
+
+def write_gtk3(p: dict[str, str]) -> None:
+    GTK3_DIR.mkdir(parents=True, exist_ok=True)
+    GTK3_CSS.write_text(css_block(gtk_named_colors(p), "GTK3 colors"))
+
+
+def write_gtk4(p: dict[str, str]) -> None:
+    GTK4_DIR.mkdir(parents=True, exist_ok=True)
+    ensure_gtk_assets()
+    named = gtk_named_colors(p)
+    extra = css_block(adwaita_colors(p), "libadwaita colors")
+
+    if BREEZE_GTK4.exists():
+        base = BREEZE_GTK4.read_text()
+
+        def repl(match: re.Match[str]) -> str:
+            name = match.group(1)
+            if name in named:
+                return f"@define-color {name} {named[name]};"
+            return match.group(0)
+
+        content = re.sub(r"@define-color\s+([A-Za-z0-9_]+)\s+[^;]+;", repl, base) + "\n" + extra
+    else:
+        content = css_block(named, "GTK4 colors") + "\n" + extra
+
+    if GTK4_CSS.is_symlink() or GTK4_CSS.exists():
+        GTK4_CSS.unlink()
+    GTK4_CSS.write_text(content)
+
+
+def update_gtk_settings() -> None:
+    for path in (GTK3_DIR / "settings.ini", GTK4_DIR / "settings.ini"):
+        values = {"gtk-icon-theme-name": ICON_THEME_NAME}
+        if not path.exists():
+            values.update(
+                {
+                    "gtk-theme-name": "Breeze-Dark",
+                    "gtk-application-prefer-dark-theme": "1",
+                }
+            )
+        set_ini_keys(path, "Settings", values)
+
+    gsettings = shutil.which("gsettings")
+    if gsettings:
+        subprocess.run(
+            [gsettings, "set", "org.gnome.desktop.interface", "icon-theme", ICON_THEME_NAME],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+
+    if XSETTINGSD.exists():
+        text = XSETTINGSD.read_text()
+        text = re.sub(r'^Net/IconThemeName\s+".*"', f'Net/IconThemeName "{ICON_THEME_NAME}"', text, flags=re.M)
+        XSETTINGSD.write_text(text)
+
+
+# --------------------------------------------------------------------------
+# Breeze icon accent (GTK/Qt don't apply KDE's accent substitution)
+# --------------------------------------------------------------------------
+
+ACCENT_RE = re.compile(r"(\.ColorScheme-Accent\s*\{\s*color:\s*)#[0-9a-fA-F]{6}")
+TEXT_RE = re.compile(r"(\.ColorScheme-Text\s*\{\s*color:\s*)#[0-9a-fA-F]{6}")
+
+
+def build_icon_theme(p: dict[str, str], verbose: bool = False) -> bool:
+    accent, fg = p["accent"], p["fg"]
+    try:
+        src_mtime = (ICON_SRC / "index.theme").stat().st_mtime_ns
+    except OSError:
+        return False
+
+    key = f"{accent}|{fg}|{src_mtime}"
+    if ICON_DST.exists() and ICON_STAMP.exists() and ICON_STAMP.read_text().strip() == key:
+        return False
+
+    if verbose:
+        print(f"  rebuilding {ICON_DST.name}")
+
+    if ICON_DST.exists():
+        shutil.rmtree(ICON_DST)
+    ICON_DST.mkdir(parents=True)
+
+    index = (ICON_SRC / "index.theme").read_text()
+    index = re.sub(r"^Name=.*$", "Name=Breeze Dark (Pywal)", index, count=1, flags=re.M)
+    index = re.sub(r"^Inherits=.*$", f"Inherits={KDE_ICON_THEME}", index, count=1, flags=re.M)
+    if re.search(r"^FollowsColorScheme=", index, flags=re.M):
+        index = re.sub(r"^FollowsColorScheme=.*$", "FollowsColorScheme=false", index, flags=re.M)
+    else:
+        index += "\nFollowsColorScheme=false\n"
+    (ICON_DST / "index.theme").write_text(index)
+
+    dirs = set()
+    match = re.search(r"^Directories=(.*)$", index, flags=re.M)
+    if match:
+        dirs.update(d.strip() for d in match.group(1).split(",") if d.strip())
+    for d in dirs:
+        (ICON_DST / d).mkdir(parents=True, exist_ok=True)
+
+    written = 0
+    # Icon names that have an accent-colored variant in at least one size.
+    # Their other sizes are copied too so GTK doesn't fall back to a larger,
+    # differently designed icon when a small size is requested.
+    accent_names: set[str] = set()
+    for svg in ICON_SRC.rglob("*.svg"):
+        try:
+            if "ColorScheme-Accent" in svg.read_text(errors="ignore"):
+                accent_names.add(svg.name)
+        except OSError:
+            continue
+
+    for svg in ICON_SRC.rglob("*.svg"):
+        if svg.name not in accent_names:
+            continue
+        try:
+            data = svg.read_text(errors="ignore")
+        except OSError:
+            continue
+
+        has_accent = "ColorScheme-Accent" in data
+        has_text = "ColorScheme-Text" in data
+        if not (has_accent or has_text):
+            continue
+
+        if has_accent:
+            data = ACCENT_RE.sub(lambda m: m.group(1) + accent, data)
+        if has_text:
+            data = TEXT_RE.sub(lambda m: m.group(1) + fg, data)
+            data = re.sub(r"#fcfcfc", fg, data, flags=re.I)
+
+        out = ICON_DST / svg.relative_to(ICON_SRC)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(data)
+        written += 1
+
+    updater = shutil.which("gtk-update-icon-cache")
+    if updater:
+        subprocess.run(
+            [updater, "-f", "-t", str(ICON_DST)],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+
+    ICON_STAMP.parent.mkdir(parents=True, exist_ok=True)
+    ICON_STAMP.write_text(key)
+    if verbose:
+        print(f"  patched {written} icons")
+    return True
+
+
+# --------------------------------------------------------------------------
+# misc
+# --------------------------------------------------------------------------
+
+def update_hyprqt6() -> None:
+    if not HYPRQT6.exists():
+        return
+    text = HYPRQT6.read_text()
+    new = re.sub(r"^(\s*icon_theme\s*=\s*).*$", rf"\g<1>{ICON_THEME_NAME}", text, flags=re.M)
+    if new != text:
+        HYPRQT6.write_text(new)
+
+
+def update_app_schemes() -> None:
+    """KDE apps can pin their own color scheme; point them at the pywal one."""
+    for name in ("dolphinrc",):
+        path = CONFIG_HOME / name
+        if not path.exists():
+            continue
+        text = path.read_text()
+        new = re.sub(r"^ColorScheme=.*$", f"ColorScheme={SCHEME_NAME}", text, flags=re.M)
+        if new != text:
+            path.write_text(new)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Sync desktop colors with pywal")
+    parser.add_argument("--accent", help="color0..color15 or #rrggbb (overrides config)")
+    parser.add_argument("--skip-icons", action="store_true", help="do not rebuild the Breeze icon theme")
+    parser.add_argument("--verbose", action="store_true")
+    args = parser.parse_args()
+
+    colors, bg, fg = load_wal()
+    accent = args.accent or load_accent(colors, bg)
+    if not accent.startswith("#"):
+        accent = colors.get(accent, load_accent(colors, bg))
+    palette = build_palette(colors, bg, fg, accent)
+
+    if args.verbose:
+        print(f"pywal-sync: bg={bg} fg={fg} accent={accent}")
+
+    write_kde_scheme(palette, kde_effects())
+    merge_kdeglobals(palette)
+    update_app_schemes()
+
+    write_qt_colors(QT5_COLORS, palette, QT5_ORDER)
+    write_qt_colors(QT6_COLORS, palette, QT_ORDER)
+    configure_qt()
+
+    write_gtk3(palette)
+    write_gtk4(palette)
+    update_gtk_settings()
+    update_hyprqt6()
+
+    if not args.skip_icons:
+        build_icon_theme(palette, verbose=args.verbose)
+
+    print(f"pywal-sync: colors updated (accent {accent})")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

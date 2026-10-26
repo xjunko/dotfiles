@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch pywal colors for changes
+
+[Path]
+PathChanged=%h/.cache/wal/colors.json
+PathModified=%h/.cache/wal/colors.json
+
+[Install]
+WantedBy=default.target
